@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block content %}
+<div class="card">
+  <h1>{{ title }}</h1>
+  <div class="alert {{ kind }}">{{ message }}</div>
+  <a class="button secondary" href="{{ back }}">{{ back_label }}</a>
+</div>
+{% endblock %}

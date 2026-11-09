@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Nastavení{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Nastavení</h1>
+  <p class="muted">Změny plánu, záloh a pojmenování se projeví hned. Změna zdroje nebo pravidel čtení XLSX pozastaví worker do nového ověření v průvodci.</p></div></div>
+
+{% if errors %}<div class="alert bad" role="alert"><b>Nastavení nelze uložit:</b><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+
+<div class="card">
+  <h2>Google účet</h2>
+  <p>Stav autorizace: {{ pill(oauth_kind, oauth_text) }}</p>
+  {% include "_client_form.html" %}
+  <p class="row"><a class="button{{ ' secondary' if not needs_reauth }}" href="/oauth/authorize">{{ "Autorizovat Google" if needs_reauth else "Znovu autorizovat" }}</a>
+    {% if not oauth_direct %}<a class="button secondary" href="/oauth/manual">Vložit adresu po schválení</a>{% endif %}</p>
+  <p class="muted small">{% if oauth_direct %}Po schválení se Google vrátí přímo na <code>{{ oauth_redirect }}</code>.{% else %}Google po schválení zobrazí nedostupnou stránku na <code>localhost:8081</code> – zkopírujte její celou adresu a vložte ji tlačítkem výše.{% endif %}
+  Heslo ke Google účtu se nikdy nezadává; zadává se pouze JSON OAuth klienta.</p>
+</div>
+
+<div class="card">
+  <h2>Heslo správce</h2>
+  <p class="muted">Zvolte si vlastní heslo (alespoň {{ min_password }} znaků). Po změně se všichni odhlásí a přihlásí novým heslem.</p>
+  <form method="post" action="/settings/password" autocomplete="off">
+    {{ csrf() }}
+    <div class="fields">
+      <label>Současné heslo<input type="password" name="current_password" autocomplete="current-password" required></label>
+      <label>Nové heslo<input type="password" name="new_password" autocomplete="new-password" minlength="{{ min_password }}" required></label>
+      <label>Nové heslo znovu<input type="password" name="confirm_password" autocomplete="new-password" minlength="{{ min_password }}" required></label>
+    </div>
+    <button>Změnit heslo</button>
+  </form>
+</div>
+
+<form method="post" action="/settings/save">
+  {{ csrf() }}
+  <fieldset><legend>Zdroj a kalendáře</legend>
+    <div class="fields">
+      <label>Google Drive URL nebo ID souboru<input name="drive_file" value="{{ cfg.drive_file_id }}" required></label>
+      <label>Časové pásmo (IANA)<input name="timezone" value="{{ cfg.timezone }}" required></label>
+      <label>Organizace<input name="organization" value="{{ cfg.organization }}" required></label>
+      <label>Šablona názvu kalendáře<span class="hint">např. <code>{organization} – {technician}</code></span><input name="calendar_template" value="{{ cfg.calendar_template }}" required></label>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Plán synchronizace</legend>
+    <div class="fields">
+      <label>Režim<select name="schedule_mode">
+        <option value="interval" {% if cfg.schedule_mode == "interval" %}selected{% endif %}>Pravidelný interval</option>
+        <option value="times" {% if cfg.schedule_mode == "times" %}selected{% endif %}>Pevné časy během dne</option></select></label>
+      <label>Interval (minuty, 1–10080)<input type="number" min="1" max="10080" name="interval_minutes" value="{{ cfg.interval_minutes }}"></label>
+      <label>Časy HH:MM (čárkou)<input name="daily_times" value="{{ cfg.daily_times|join(', ') }}"></label>
+      <label>Prodleva stability (s)<span class="hint">Soubor musí zůstat beze změny, než se zpracuje.</span><input type="number" min="0" max="3600" name="stability_seconds" value="{{ cfg.stability_seconds }}"></label>
+    </div>
+    <p class="muted small">Další běh: {{ next_sync_at|dt(cfg.timezone) if complete else "po aktivaci" }}</p>
+  </fieldset>
+
+  <fieldset><legend>Zálohy databáze</legend>
+    <div class="fields">
+      <label class="check"><input type="checkbox" name="backup_enabled" {% if cfg.backup_frequency != "disabled" %}checked{% endif %}> Automatická záloha zapnuta</label>
+      <label>Frekvence<select name="backup_frequency">
+        <option value="daily" {% if cfg.backup_frequency in ("daily", "disabled") %}selected{% endif %}>Denně</option>
+        <option value="weekly" {% if cfg.backup_frequency == "weekly" %}selected{% endif %}>Týdně (neděle)</option></select></label>
+      <label>Čas<input type="time" name="backup_time" value="{{ cfg.backup_time }}"></label>
+      <label>Ponechat posledních (ks)<input type="number" min="1" max="1000" name="backup_retention_count" value="{{ cfg.backup_retention_count }}"></label>
+      <label>Ponechat nejvýše (dní)<input type="number" min="1" max="3650" name="backup_retention_days" value="{{ cfg.backup_retention_days }}"></label>
+      <label>Podadresář pod <code>/data/backups</code><input name="backup_directory" value="{{ cfg.backup_directory }}"></label>
+    </div>
+    <p class="muted small">Záloha obsahuje pouze SQLite databázi. OAuth token se do zálohy nekopíruje.</p>
+  </fieldset>
+
+  <fieldset><legend>Mazání zmizelých událostí</legend>
+    <label class="check"><input type="checkbox" name="delete_enabled" {% if cfg.delete_enabled %}checked{% endif %}> Mazat „stale“ události z kalendářů techniků</label>
+    <label class="check"><input type="checkbox" name="confirm_delete"> Rozumím, že vlastněné události, které zmizely z XLSX ve dvou verzích, budou smazány (nutné při zapnutí).</label>
+    <p class="muted small">Výchozí a doporučený stav je vypnuto. Cizí události se nemažou nikdy.</p>
+  </fieldset>
+
+  <details class="card"><summary>Pokročilé – čtení XLSX</summary>
+    <div class="fields mt">
+      <label>Název profilu workbooku<span class="hint">Součást identity událostí – změna vytvoří události znovu!</span><input name="deployment_name" value="{{ cfg.deployment_name }}"></label>
+      <label>Vzor názvu listů<input name="sheet_pattern" value="{{ cfg.sheet_pattern }}"></label>
+      <label>Sloupec se jmény techniků<input name="technician_name_column" value="{{ cfg.technician_name_column }}"></label>
+      <label>První datový sloupec (prázdné = auto)<input name="first_data_column" value="{{ cfg.first_data_column }}"></label>
+      <label>Řádků pro hledání hlavičky<input type="number" min="1" max="100" name="header_scan_rows" value="{{ cfg.header_scan_rows }}"></label>
+      <label>Horizont dopředu (dní)<input type="number" min="1" max="730" name="sync_horizon_days" value="{{ cfg.sync_horizon_days }}"></label>
+      <label>Zpětně (dní)<input type="number" min="0" max="365" name="sync_lookback_days" value="{{ cfg.sync_lookback_days }}"></label>
+      <label>Práh poklesu počtu zápisů (0–0,99)<input type="number" step="0.01" min="0" max="0.99" name="assignment_drop_threshold" value="{{ cfg.assignment_drop_threshold }}"></label>
+      <label>Pokračovací řádky<select name="continuation_policy">
+        <option value="blank-name-continues" {% if cfg.continuation_policy == "blank-name-continues" %}selected{% endif %}>Prázdné jméno pokračuje blok</option>
+        <option value="strict" {% if cfg.continuation_policy == "strict" %}selected{% endif %}>Striktně (jen řádek se jménem)</option></select></label>
+      <label>Stale politika<select name="stale_policy">
+        <option value="two-snapshot" {% if cfg.stale_policy == "two-snapshot" %}selected{% endif %}>Dvě odlišné stabilní verze</option>
+        <option value="disabled" {% if cfg.stale_policy == "disabled" %}selected{% endif %}>Nesledovat</option></select></label>
+      <label>Barvy (JSON, token → Google color ID 1–11)<input name="color_map_json" value="{{ color_json }}"></label>
+      <label>Prefix kalendáře (záloha pro šablonu)<input name="calendar_prefix" value="{{ cfg.calendar_prefix }}"></label>
+    </div>
+    <label class="check"><input type="checkbox" name="auto_detect_dates" {% if cfg.auto_detect_dates %}checked{% endif %}> Automaticky najít datumové hlavičky</label>
+    <label class="check"><input type="checkbox" name="parse_phones" {% if cfg.parse_phones %}checked{% endif %}> Rozpoznávat telefony do popisu</label>
+    <label class="check"><input type="checkbox" name="parse_addresses" {% if cfg.parse_addresses %}checked{% endif %}> Rozpoznávat jednoznačnou adresu jako místo</label>
+    <p><a href="/setup/workbook-mapping">Diagnostika mapování →</a></p>
+  </details>
+  <button>Uložit nastavení</button>
+</form>
+{% endblock %}

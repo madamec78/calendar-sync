@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Dokončení Google OAuth{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Dokončení Google OAuth</h1>
+  <p>Po schválení Google zobrazí nedostupnou stránku na <code>localhost:8081</code>. Zkopírujte <b>celou adresu</b> z adresního řádku a vložte ji sem.</p>
+  <form method="post">
+    {{ csrf() }}
+    <label>Adresa po schválení<input name="callback_url" required placeholder="http://localhost:8081/?state=…&code=…"></label>
+    <button>Dokončit autorizaci</button>
+  </form>
+</div>
+{% endblock %}

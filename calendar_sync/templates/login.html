@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Přihlášení{% endblock %}
+{% block content %}
+<div class="login-box card">
+  <h1>Přihlášení</h1>
+  <p class="muted">Administrace synchronizace plánu techniků.</p>
+  {% if error %}<div class="alert bad" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    {{ csrf() }}
+    <label>Heslo správce<input type="password" name="password" autocomplete="current-password" autofocus required></label>
+    <button>Přihlásit</button>
+  </form>
+</div>
+{% endblock %}

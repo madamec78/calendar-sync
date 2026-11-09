@@ -1,0 +1,22 @@
+<div class="client-box">
+  <h3>OAuth klient (JSON z Google Cloud)</h3>
+  {% if client.present and not client.get("invalid") %}
+    <p>{{ pill("good", "klient nahrán") }} <span class="muted small">{{ client.hint }}{% if client.uploaded %} · uloženo ve volume aplikace{% endif %}</span></p>
+  {% elif client.get("invalid") %}
+    <p>{{ pill("bad", "soubor klienta je neplatný") }} – nahrajte nový.</p>
+  {% else %}
+    <p>{{ pill("warn", "klient zatím chybí") }}</p>
+  {% endif %}
+  <details class="plain"{% if not client.present %} open{% endif %}>
+    <summary>{{ "Nahradit klienta" if client.present else "Vložit klienta" }}</summary>
+    <form method="post" action="/settings/oauth-client" enctype="multipart/form-data" class="mt">
+      {{ csrf() }}
+      <label>Obsah staženého JSON (<code>client_secret_….json</code>)
+        <textarea name="client_json" rows="6" spellcheck="false" autocomplete="off" placeholder='{"installed":{"client_id":"…apps.googleusercontent.com", …}}'></textarea></label>
+      <label>nebo vyberte soubor<input type="file" name="client_file" accept=".json,application/json"></label>
+      <button>Uložit klienta</button>
+    </form>
+    <p class="muted small">Soubor se zkontroluje (musí jít o typ <b>Desktop app</b>) a uloží na server s právy jen pro službu. Tajná část se nikdy nezobrazuje ani nelogují.
+      Posílá se přes tuto stránku – používejte ji jen v důvěryhodné síti nebo přes HTTPS.</p>
+  </details>
+</div>

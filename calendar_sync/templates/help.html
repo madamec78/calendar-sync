@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Nápověda{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Nápověda</h1>
+  <p class="muted">Jak aplikace funguje, co očekává od správce a jak ji přivést do ostrého provozu.</p></div></div>
+
+<nav class="card toc" aria-label="Obsah nápovědy">
+  <b>Obsah:</b>
+  <a href="#co-dela">Co aplikace dělá</a> ·
+  <a href="#admin">Co očekává od správce</a> ·
+  <a href="#chovani">Jak se chová</a> ·
+  <a href="#google">Příprava Google OAuth</a> ·
+  <a href="#upload">Nahrání klienta</a> ·
+  <a href="#autorizace">Autorizace</a> ·
+  <a href="#aktivace">Aktivace</a> ·
+  <a href="#heslo">Zapomenuté heslo</a> ·
+  <a href="#stavy">Stavy a řešení potíží</a> ·
+  <a href="#provoz">Provoz a zálohy</a> ·
+  <a href="#pojmy">Pojmy</a>
+</nav>
+
+<div class="card" id="co-dela">
+  <h2>Co aplikace dělá</h2>
+  <p>Čte plánovací <b>XLSX na Google Drive</b> (listy typu <code>9.11. - 13.11.2026</code>) a pro každého technika udržuje jeho <b>vlastní Google kalendář</b>
+    se zakázkami z plánu. Technik kalendář pouze čte (sdílení „reader“); nic v něm nepíše a do administrace se nikdy nepřihlásí.</p>
+  <p>Cesta jedné synchronizace: <b>plán</b> → soubor je stabilní (nezměnil se během prodlevy) → stažení a kontrola MD5 → čtení XLSX → <b>porovnání</b> s tím, co už je v kalendáři →
+    vytvoření / úprava událostí → záznam do historie. Aplikace je deterministická: žádná AI, stejný soubor dá vždy stejný výsledek.</p>
+</div>
+
+<div class="card" id="admin">
+  <h2>Co očekává od správce</h2>
+  <ul class="help">
+    <li><b>Jednou:</b> připravit Google OAuth (viz níže), projít <a href="/setup">Průvodce</a>, doplnit technikům e-maily a provést jejich <a href="/technicians">onboarding</a>.</li>
+    <li><b>Při novém technikovi v XLSX:</b> jméno se objeví v sekci <i>Nalezení v XLSX</i> na stránce Technici. Doplňte e-mail a přidejte ho, nebo jméno <i>Ignorujte</i> (poznámky, legenda…).
+      Technik bez e-mailu a kalendáře se <b>nesynchronizuje</b> – Přehled na to upozorní.</li>
+    <li><b>Hlídat Přehled:</b> stav workeru, Google OAuth, technici čekající na onboarding, chyby u techniků. Při „nepřipraven“ nebo vypršené autorizaci použijte <i>Obnovit Google OAuth</i>.</li>
+    <li><b>Hlídat Historii a Ke smazání:</b> běhy se stavem <i>Zablokováno</i> nebo <i>Částečně</i> vyžadují zásah (viz Stavy). Seznam „ke smazání“ si občas projděte – ukazuje, co z XLSX zmizelo.</li>
+    <li><b>Neměnit strukturu XLSX bez dohody</b> (sloupec se jmény, datumové hlavičky, názvy listů). Aplikace změnu rozpozná a raději zastaví zápis, než aby poškodila kalendáře.</li>
+    <li><b>Mazání zapínat až po několika kontrolních týdnech</b> a po zálohování. Výchozí stav je vypnuto.</li>
+    <li><b>Chránit přístup:</b> silné vlastní heslo správce (měníte ho v <a href="/settings">Nastavení → Heslo správce</a>; ztracené heslo obnovíte příkazem <code>calendar-sync set-password</code> na serveru), provoz za HTTPS (nebo jen v LAN), zálohy obsahují citlivá data.</li>
+    <li><b>Nezasahovat ručně do vlastněných událostí</b> v kalendářích techniků – další synchronizace je přepíše podle XLSX. Vlastní události, které do kalendáře přidáte, se nikdy nemění ani nemažou.</li>
+  </ul>
+</div>
+
+<div class="card" id="chovani">
+  <h2>Jak se aplikace chová</h2>
+  <ul class="help">
+    <li><b>Plán:</b> běží v intervalu (1–10080 min) nebo v pevných časech dne podle Nastavení. Změna nastavení plánu a záloh se projeví hned; změna zdroje nebo pravidel čtení XLSX worker <b>pozastaví</b>, dokud neproběhne nové ověření v Průvodci.</li>
+    <li><b>Stabilita:</b> po změně souboru počká zadanou prodlevu. Změní-li se zdroj během stahování, běh skončí jako <i>Odloženo</i> a zopakuje se příště.</li>
+    <li><b>Okno synchronizace:</b> zpracovává se jen horizont dopředu (výchozí 90 dní) a volitelně zpětně. Starší minulost se nepřepisuje.</li>
+    <li><b>Čas události:</b> je-li v buňce explicitní interval (<code>9.11.2026 08:00-10:00</code>) a datum sedí se sloupcem, vznikne časová událost; jinak celodenní. Celý text buňky je název události.
+      Rozpoznaný telefon jde do popisu, jednoznačná adresa do místa. Barva podle kategorie (TMB, CTN, VDF) – upravitelné v Nastavení.</li>
+    <li><b>Vlastnictví:</b> událost je „naše“, jen když má naše skryté vlastnosti (soubor, technik, klíč). <b>Cizí události se nikdy neupravují ani nemažou.</b> Aplikace nikdy nenastavuje účastníky a nikdy nerozesílá oznámení o událostech.</li>
+    <li><b>Úpravy XLSX:</b> přesun řádku nebo vložení řádku událost nezduplikuje; klíč událostí se neodvozuje z čísla řádku. Změní se jen to, co se skutečně změnilo.</li>
+    <li><b>Zmizelé události:</b> událost, která chybí v XLSX, se označí „ke smazání“ až když chybí ve <b>dvou po sobě jdoucích různých verzích souboru</b> (opakovaná synchronizace téže verze se nepočítá).
+      Smaže se až při zapnutém mazání a jen události vlastněné aplikací.</li>
+    <li><b>Ochrana proti rozbitému souboru:</b> změní-li se struktura listu, chybí datumové hlavičky nebo prudce klesne počet zápisů, běh skončí jako <i>Zablokováno</i> a nic se nezmění ani nesmaže.</li>
+    <li><b>Neznámá jména:</b> jméno v XLSX, které není mezi techniky, se jen zaznamená (sekce Nalezení). Kalendář ani události pro něj nevzniknou.</li>
+    <li><b>Chyba u jednoho technika</b> neblokuje ostatní; běh skončí jako <i>Částečně</i> a chyba je vidět u technika.</li>
+    <li><b>Pozvánka:</b> při prvním sdílení kalendáře Google odešle technikovi jednorázovou pozvánku ke <b>sdílenému kalendáři</b> (nejde o pozvánku k události). Opakovaný onboarding už nic neposílá.</li>
+    <li><b>Dry-run</b> vždy jen čte a ukazuje plán změn; do kalendářů nezapíše nic.</li>
+  </ul>
+</div>
+
+<div class="card" id="google">
+  <h2>Příprava Google OAuth – 1. Google Cloud Console</h2>
+  <div class="alert info">Aplikace nepoužívá API klíč, ale <b>OAuth 2.0</b>: soubor OAuth klienta (JSON) a dlouhodobě uložený <b>refresh token</b>.
+    Žádné přihlašovací údaje se nikdy nezadávají do formulářů ani do chatu.</div>
+  <ol class="help">
+    <li>V novém nebo stávajícím projektu povolte <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer">Google Drive API</a>
+      a <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener noreferrer">Google Calendar API</a>.</li>
+    <li>V <a href="https://console.cloud.google.com/auth/branding" target="_blank" rel="noopener noreferrer">Google Auth Platform → Branding</a> vyplňte název aplikace a kontaktní e-mail.</li>
+    <li>V <a href="https://console.cloud.google.com/auth/audience" target="_blank" rel="noopener noreferrer">Audience</a> nastavte <b>Publish app / In production</b>.
+      V režimu <i>Testing</i> Google zneplatní refresh token zhruba po <b>7 dnech</b> a autorizaci byste museli dělat pořád dokola.
+      Je-li to Workspace účet jen pro vaši organizaci, zvolte <i>Internal</i>. Přepnutí do produkce je samostatný krok – nevyplývá z existence Workspace účtu.</li>
+    <li>V <a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener noreferrer">Clients</a> vytvořte klienta typu <b>Desktop app</b> a stáhněte JSON.</li>
+    <li>Účtu, kterým se budete autorizovat, sdílejte plánovací XLSX alespoň pro čtení. Tento účet bude <b>vlastnit kalendáře techniků</b>.</li>
+  </ol>
+  <p class="muted small">Dokumentace: <a href="https://developers.google.com/identity/protocols/oauth2" target="_blank" rel="noopener noreferrer">Google OAuth 2.0</a> ·
+    <a href="https://support.google.com/cloud/answer/10311615" target="_blank" rel="noopener noreferrer">OAuth consent screen</a></p>
+</div>
+
+<div class="card" id="upload">
+  <h2>2. Vložení JSON do aplikace</h2>
+  <p>Nejjednodušší je vložit obsah staženého JSON přímo v aplikaci. <b>Nevkládejte ho do chatu ani do repozitáře.</b></p>
+  {% include "_client_form.html" %}
+  <p class="muted small">Postup: otevřete stažený soubor v textovém editoru, zkopírujte celý obsah a vložte ho do pole, případně vyberte soubor. Aplikace ověří, že jde o klienta typu <i>Desktop app</i>.</p>
+  <details class="plain"><summary>Alternativa: soubor přímo na server</summary>
+    <p><b>Instalace přes <code>deploy/install.sh</code></b>: soubor patří do <code>/etc/calendar-sync/google_oauth_client.json</code> (vlastník <code>calsync</code>, práva 600).</p>
+    <p><b>Docker / lokálně:</b> <code>secrets/google_oauth_client.json</code> (Docker), <code>.local\google_oauth_client.json</code> (<code>run-local.ps1</code>). Soubor na disku má přednost před nahraným v UI.</p>
+  </details>
+</div>
+
+<div class="card" id="autorizace">
+  <h2>3. Autorizace v prohlížeči</h2>
+  <ol class="help">
+    <li>Na stránce <a href="/setup">Průvodce</a> nebo v <a href="/settings">Nastavení</a> klikněte na <b>Autorizovat Google</b> a schvalte přístup.</li>
+    <li>Při prvním schválení Google u neověřené aplikace zobrazí varování. Klikněte na <i>Advanced → Go to … (unsafe)</i> – je to vaše vlastní aplikace.
+      Aplikace žádá scope <code>drive.readonly</code> (čtení XLSX) a <code>calendar</code> (kalendáře techniků).</li>
+    <li>Google se pak přesměruje na <code>localhost:8081</code>, kde se nic nenačte – <b>to je v pořádku</b>. Zkopírujte celou adresu z adresního řádku a
+      vložte ji na stránce <a href="/oauth/manual">Vložit adresu po schválení</a>.
+      (Při adrese aplikace <code>http://localhost:…</code> se Google vrací přímo a vkládání odpadá.)</li>
+  </ol>
+</div>
+
+<div class="card" id="aktivace">
+  <h2>4. Aktivace a první zápis</h2>
+  <ol class="help">
+    <li>V Průvodci zadejte URL nebo ID plánovacího XLSX, načtěte jména techniků a doplňte jim e-maily.</li>
+    <li>Spusťte <b>Ověřit a aktivovat</b>. Provede se jen dry-run – <b>nic se nezapisuje</b>.</li>
+    <li>Zápis do kalendářů a odeslání jednorázové pozvánky ke sdílenému kalendáři nastane až po vašem kliknutí na <b>Onboard</b> u techniků a na <b>Synchronizovat nyní</b>.
+      Mazání zmizelých událostí zůstává vypnuté, dokud ho sami nezapnete v Nastavení.</li>
+  </ol>
+  <p class="muted small">Refresh token může být později zneplatněn (odebrání přístupu, změna hesla účtu…). Přehled to ukáže a tlačítkem <i>Obnovit Google OAuth</i> autorizaci zopakujete.</p>
+</div>
+
+<div class="card" id="heslo">
+  <h2>Zapomenuté heslo správce</h2>
+  <p>Heslo si volíte sami (při instalaci nebo v <a href="/settings">Nastavení → Heslo správce</a>) a ukládá se pouze jako hash – aplikace ho <b>nedokáže zobrazit ani poslat e-mailem</b>.
+    Zapomenuté heslo proto nejde „obnovit odkazem“, ale <b>nastavit znovu na serveru</b>. K tomu potřebujete přístup na server jako administrátor (root).</p>
+  <p><b>Instalace přes <code>deploy/install.sh</code></b> (Debian/Ubuntu, LXC, VM):</p>
+  <pre>sudo -u calsync env DATA_DIR=/var/lib/calendar-sync   ADMIN_PASSWORD_FILE=/etc/calendar-sync/admin_password.txt   SESSION_SECRET_FILE=/etc/calendar-sync/session_secret.txt   /opt/calendar-sync/venv/bin/calendar-sync set-password</pre>
+  <p>Příkaz se zeptá na nové heslo (dvakrát, nejméně {{ min_password }} znaků). Restart služby není nutný; stávající přihlášení platí do vypršení relace. Nebo znovu spusťte instalační skript s novým heslem:
+    <code>sudo ADMIN_PASSWORD='…' ./deploy/install.sh &lt;adresa&gt;</code> (data a nastavení zůstanou).</p>
+  <p><b>Docker:</b></p>
+  <pre>docker compose exec calendar-sync calendar-sync set-password</pre>
+  <p class="muted small">Příkaz nastaví heslo uložené v databázi, které má přednost před heslem ze souboru/secretu. Heslo ze souboru zůstává jen jako výchozí pro první přihlášení.
+    Nemáte-li přístup na server, heslo obnovit nelze – zůstává vám instalace znovu provést (OAuth klient i token budou nutné nahrát/autorizovat znovu, pokud smažete data).</p>
+</div>
+
+<div class="card" id="stavy">
+  <h2>Stavy a řešení potíží</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Co vidíte</th><th>Význam</th><th>Co udělat</th></tr>
+    <tr><td>{{ run_pill("ok") }}</td><td>Běh dopadl v pořádku.</td><td>Nic.</td></tr>
+    <tr><td>{{ run_pill("partial") }}</td><td>Někteří technici nemají kalendář, nebo u někoho selhal zápis.</td><td>Dokončete onboarding; chybu u technika najdete na Přehledu a v detailu běhu.</td></tr>
+    <tr><td>{{ run_pill("deferred") }}</td><td>Soubor se měnil během běhu.</td><td>Nic, příští běh to zopakuje.</td></tr>
+    <tr><td>{{ run_pill("drift_blocked") }}</td><td>Změnila se struktura XLSX nebo prudce klesl počet zápisů; nic se nezapsalo ani nesmazalo.</td><td>Zkontrolujte soubor a problémy v detailu běhu. Je-li změna zamýšlená, upravte pravidla čtení v Nastavení a znovu ověřte v Průvodci.</td></tr>
+    <tr><td>{{ run_pill("error") }}</td><td>Běh selhal (např. Google nedostupný).</td><td>Detail běhu a log; opakuje se v dalším termínu.</td></tr>
+    <tr><td>Google OAuth: neplatná / chybí</td><td>Autorizace vypršela, byla odvolána, nebo ještě nebyla provedena.</td><td><i>Obnovit Google OAuth</i> (sekce 3). Nepoužívejte token z jiné aplikace.</td></tr>
+    <tr><td>Technik „čeká na onboarding“</td><td>Má e-mail, ale ještě nemá kalendář.</td><td>Tlačítko Onboard (nebo hromadný onboarding).</td></tr>
+    <tr><td>Nalezená nová jména</td><td>V XLSX přibylo jméno, které nemá technika.</td><td>Přidejte s e-mailem, nebo ignorujte.</td></tr>
+    <tr><td>Události „ke smazání“</td><td>Chybí ve dvou po sobě jdoucích verzích XLSX.</td><td>Ověřte, že zmizely záměrně. Při vypnutém mazání se nic nestane.</td></tr>
+    <tr><td>Calendar 401/403</td><td>Účet nemá oprávnění ke kalendáři, nebo je zneplatněná autorizace.</td><td>Ověřte vlastníka kalendáře a scopes; případně obnovte OAuth.</td></tr>
+  </table></div>
+</div>
+
+<div class="card" id="provoz">
+  <h2>Provoz a zálohy</h2>
+  <ul class="help">
+    <li><code>/healthz</code> – proces žije; <code>/readyz</code> – databáze, nastavení, OAuth a poslední běh; <code>/metrics</code> – metriky pro Prometheus.</li>
+    <li>Záloha SQLite databáze běží podle Nastavení (denně/týdně, retence počtem i stářím) do <code>/data/backups</code>. Zálohy neobsahují OAuth token – ten při obnově stačí autorizovat znovu.</li>
+    <li>Obnova: službu zastavit, databázi nahradit zálohou, spustit, zkontrolovat Přehled a provést dry-run, teprve pak synchronizovat.</li>
+    <li>Logy jsou strukturované (JSON) a neobsahují tokeny. Aplikace běží jako jediný proces – nespouštějte více workerů.</li>
+  </ul>
+</div>
+
+<div class="card" id="pojmy">
+  <h2>Pojmy</h2>
+  <dl class="kv">
+    <dt>Onboarding</dt><dd>Vytvoření (nebo znovupoužití) kalendáře technika a udělení čtení na jeho e-mail.</dd>
+    <dt>Dry-run</dt><dd>Zkušební běh: ukáže plán změn, nic nezapíše.</dd>
+    <dt>Stale</dt><dd>Naše událost, která už v XLSX není.</dd>
+    <dt>Snapshot</dt><dd>Konkrétní verze souboru na Drive (verze + MD5 + velikost).</dd>
+    <dt>Worker</dt><dd>Plánovač, který běží na pozadí a spouští synchronizace a zálohy.</dd>
+    <dt>Vlastněná událost</dt><dd>Událost vytvořená aplikací; jediný druh, který aplikace smí měnit nebo mazat.</dd>
+  </dl>
+</div>
+{% endblock %}

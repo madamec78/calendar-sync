@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Průvodce{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ "Průvodce aktivací" if not complete else "Stav aktivace" }}</h1>
+  <p class="muted">Worker se spustí až po úspěšném ověření spojení, načtení XLSX a kontrolním dry-runu (nic se nezapisuje ani nemaže).</p></div></div>
+
+{% if complete %}<div class="alert ok"><b>Worker je aktivní.</b> Další synchronizace: {{ next_sync_at|dt(cfg.timezone) }}; záloha: {{ next_backup_at|dt(cfg.timezone) if next_backup_at else "vypnuta" }}. <a href="/">Přehled</a></div>{% endif %}
+{% if error %}<div class="alert bad" role="alert"><b>Selhal krok „{{ failed_step }}“:</b> {{ error }}</div>{% endif %}
+
+<div class="card">
+  <ol class="steps">
+    {% for step in steps %}
+    <li class="{{ 'failed' if step.failed else ('done' if step.ok else '') }}">
+      <div><div class="step-title">{{ step.title }} {% if step.failed %}{{ pill("bad", "selhalo") }}{% elif step.ok %}{{ pill("good", "hotovo") }}{% else %}{{ pill("", "čeká") }}{% endif %}</div>
+        {% if step.detail %}<div class="muted small">{{ step.detail }}</div>{% endif %}
+        {% if step.key == "oauth" and not step.ok %}
+          <p class="row"><a class="button small" href="/oauth/authorize">Autorizovat Google</a> <a class="button secondary small" href="/oauth/manual">Vložit adresu po schválení</a></p>
+          {% include "_client_form.html" %}
+        {% elif step.key == "validation" %}
+          <form method="post" action="/setup/source" class="row">{{ csrf() }}
+            <input name="drive_file" value="{{ cfg.drive_file_id }}" placeholder="URL nebo ID plánovacího XLSX na Google Drive" required>
+            <button class="secondary small">Uložit zdroj</button></form>
+        {% elif step.key == "mapping" and cfg.drive_file_id %}
+          <form method="post" action="/setup/scan" data-busy="Načítám…">{{ csrf() }}<button class="secondary small">Načíst jména techniků z XLSX</button></form>
+        {% elif step.key == "technicians" %}
+          <a class="button secondary small" href="/technicians">Přiřadit e-maily technikům</a>
+        {% elif step.key == "onboarding" and complete %}
+          <a class="button small" href="/technicians">Dokončit onboarding</a>
+        {% endif %}
+      </div></li>
+    {% endfor %}
+  </ol>
+</div>
+
+<div class="card">
+  <h2>Ověřit a {{ "znovu aktivovat" if complete else "aktivovat" }} synchronizaci</h2>
+  <p>Ověří konfiguraci, Google OAuth, přístup k Drive a Calendar, načte XLSX, zkontroluje jeho strukturu a provede dry-run bez zápisu a bez mazání.</p>
+  <form method="post" action="/setup/verify-and-activate" data-busy="Ověřuji…">{{ csrf() }}<button>Ověřit a aktivovat worker</button></form>
+  <p class="muted small">Pokročilé parametry parseru, plán a zálohy: <a href="/settings">Nastavení</a>.</p>
+</div>
+{% endblock %}

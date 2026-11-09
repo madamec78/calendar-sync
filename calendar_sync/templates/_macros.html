@@ -1,0 +1,3 @@
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endmacro %}
+{% macro pill(kind, label) %}<span class="pill {{ kind }}">{{ label }}</span>{% endmacro %}
+{% macro run_pill(status) %}{% set kinds = {"ok": "good", "partial": "warn", "deferred": "warn", "running": "warn", "debouncing": "warn", "drift_blocked": "bad", "error": "bad"} %}{% set labels = {"ok": "OK", "partial": "Částečně", "deferred": "Odloženo", "running": "Běží", "drift_blocked": "Zablokováno", "error": "Chyba"} %}<span class="pill {{ kinds.get(status, '') }}">{{ labels.get(status, status) }}</span>{% endmacro %}

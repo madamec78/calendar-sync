@@ -1,0 +1,41 @@
+services:
+  calendar-sync:
+    build:
+      context: .
+    image: calendar-sync:2.0.0
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      DATA_DIR: /data
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://calendar-sync.lan}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Runtime schedule, stability, backups, Drive file and stale policy are configured in the first-run wizard.
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      SESSION_SECRET_FILE: /run/secrets/session_secret
+      GOOGLE_OAUTH_CLIENT_FILE: /run/secrets/google_oauth_client.json
+      GOOGLE_OAUTH_TOKEN_FILE: /data/google-token.json
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - calendar_sync_data:/data
+      # Explicit read-only bind mounts work consistently with `docker compose run`
+      # as well as `up`; the container itself remains non-root.
+      - ./secrets/admin_password.txt:/run/secrets/admin_password:ro
+      - ./secrets/session_secret.txt:/run/secrets/session_secret:ro
+      - ./secrets/google_oauth_client.json:/run/secrets/google_oauth_client.json:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  calendar_sync_data: {}

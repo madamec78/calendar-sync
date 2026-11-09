@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Audit{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Audit změn</h1><p class="muted">Posledních 200 záznamů o změně nastavení a správě techniků.</p></div></div>
+<div class="card">
+{% if rows %}
+<div class="table-wrap"><table>
+  <tr><th>Kdy</th><th>Kdo</th><th>Akce</th><th>Detail</th></tr>
+  {% for r in rows %}
+  <tr><td class="small">{{ r.entry.created_at|dt(tz, true) }}</td><td>{{ r.entry.actor }}</td><td><code>{{ r.entry.action }}</code></td>
+    <td class="small">{% if r.entry.action == "setting_changed" %}<b>{{ r.details.get("key") }}</b>{% else %}{{ r.details|pretty_json }}{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="empty">Zatím žádné záznamy.</div>{% endif %}
+</div>
+{% endblock %}

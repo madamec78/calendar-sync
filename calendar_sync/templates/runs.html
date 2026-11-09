@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Historie běhů{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Historie běhů</h1><p class="muted">Posledních 100 synchronizací (plánované, ruční i dry-run).</p></div></div>
+<div class="card">
+{% if runs %}
+<div class="table-wrap"><table>
+  <tr><th>#</th><th>Začátek</th><th>Režim</th><th>Stav</th><th>Nové</th><th>Upraveno</th><th>Beze změny</th><th>Problémy</th><th></th></tr>
+  {% for item in runs %}{% set r = item.run %}{% set s = item.summary %}
+  <tr><td>{{ r.id }}</td><td>{{ r.started_at|dt(tz) }}</td><td>{{ r.mode }}</td><td>{{ run_pill(r.status) }}</td>
+    <td>{{ s.get("create", "–") }}</td><td>{{ s.get("update", "–") }}</td><td>{{ s.get("unchanged", "–") }}</td>
+    <td>{{ s.get("issue_count", "–") }}</td><td><a href="/runs/{{ r.id }}">Detail</a></td></tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="empty">Zatím neproběhla žádná synchronizace.</div>{% endif %}
+</div>
+{% endblock %}

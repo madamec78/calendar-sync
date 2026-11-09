@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Ke smazání{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Události, které zmizely z XLSX</h1>
+  <p class="muted">Událost je „stale“, až když chybí ve <b>dvou po sobě jdoucích stabilních, odlišných verzích</b> souboru.</p></div></div>
+
+{% if policy == "disabled" %}<div class="alert warn">Stale politika je vypnutá – zmizelé události se nesledují.</div>
+{% elif delete_enabled %}<div class="alert bad"><b>Mazání je zapnuté.</b> Události označené „ke smazání“ budou při příštím zápisu odstraněny z kalendáře technika (pouze ty vlastněné touto službou).</div>
+{% else %}<div class="alert info">Mazání je <b>vypnuté</b> (doporučený výchozí stav) – níže jen vidíte, co by se smazalo.</div>{% endif %}
+
+<div class="card">
+{% if rows %}
+<div class="table-wrap"><table>
+  <tr><th>Technik</th><th>Datum</th><th>Zakázka / obsah</th><th>Stav</th></tr>
+  {% for r in rows %}
+  <tr><td>{{ r.technician }}</td><td>{{ r.date }}</td><td class="small"><code>{{ r.token }}</code></td>
+    <td>{% if r.pending %}{{ pill("bad", "ke smazání") }}{% else %}{{ pill("warn", "chybí 1× – čeká na potvrzení") }}{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="empty">Žádné chybějící události. 🎉</div>{% endif %}
+</div>
+{% endblock %}

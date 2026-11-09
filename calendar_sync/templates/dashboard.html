@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Přehled{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Přehled</h1><p class="muted">Stav synchronizace plánu techniků do jejich Google kalendářů.</p></div>
+  {% if complete %}
+  <form method="post" action="/sync" class="row" data-busy="Pracuji…">{{ csrf() }}
+    <button class="secondary" name="mode" value="dry-run" title="Zkontroluje XLSX a ukáže plánované změny. Nic nezapisuje.">Dry-run</button>
+    <button name="mode" value="apply" title="Okamžitě provede skutečné změny v kalendářích.">Synchronizovat nyní</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if not complete %}<div class="alert warn"><b>První spuštění není dokončeno.</b> Worker je zablokován, dokud neprojdete <a href="/setup">průvodcem aktivací</a>.</div>{% endif %}
+{% if worker_failure %}<div class="alert bad"><b>Poslední běh workeru selhal:</b> {{ worker_failure.get("message", "Neznámá chyba") }}
+  {% if worker_failure.get("code") == "oauth_reauthorization_required" %} <a href="/oauth/authorize">Obnovit Google OAuth</a>{% endif %}</div>{% endif %}
+{% if needs_reauth and not worker_failure %}<div class="alert warn">Google OAuth: {{ oauth_text }}. <a href="/oauth/authorize">Autorizovat Google</a> · <a href="/oauth/manual">Dokončit ručně</a></div>{% endif %}
+{% if complete and unonboarded %}<div class="alert warn"><b>{{ unonboarded|length }} technik(ů) čeká na onboarding</b> – bez kalendáře se jejich události nezapisují. <a href="/technicians">Přejít na techniky</a></div>{% endif %}
+{% if candidates %}<div class="alert info">Nalezena nová jména v XLSX: <b>{{ candidates }}</b>. <a href="/technicians">Přiřaďte jim e-mail nebo je ignorujte.</a></div>{% endif %}
+{% if errored %}<div class="alert bad">Chyba u techniků: {% for t in errored %}<b>{{ t.workbook_name }}</b> ({{ t.last_error }}){% if not loop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+
+<div class="grid">
+  <div class="card"><div class="stat-label">Worker</div><div class="stat-value">{% if worker_ready %}{{ pill("good", "připraven") }}{% else %}{{ pill("bad", "nepřipraven") }}{% endif %}</div>
+    <div class="muted small">Google OAuth: {{ oauth_text }}</div></div>
+  <div class="card"><div class="stat-label">Další synchronizace</div><div class="stat-value small">{{ (next_sync_at|dt(cfg.timezone)) if complete else "–" }}</div>
+    <div class="muted small">{% if complete %}{{ next_sync_at|reldt }} · interval {{ cfg.interval_minutes }} min{% endif %}</div></div>
+  <div class="card"><div class="stat-label">Technici</div><div class="stat-value">{{ onboarded }} / {{ enabled }}</div><div class="muted small">aktivních s hotovým kalendářem</div></div>
+  <div class="card"><div class="stat-label">Události v péči</div><div class="stat-value">{{ tracked }}</div>
+    <div class="muted small">{% if pending %}<a href="/stale">{{ pending }} čeká na smazání</a>{% else %}žádné stale{% endif %}</div></div>
+  <div class="card"><div class="stat-label">Záloha DB</div><div class="stat-value small">{{ (next_backup_at|dt(cfg.timezone)) if next_backup_at else "vypnuta" }}</div></div>
+</div>
+
+<div class="card">
+  <div class="row spread"><h2>Poslední běhy</h2><a href="/runs">Celá historie →</a></div>
+  {% if runs %}
+  <div class="table-wrap"><table>
+    <tr><th>Začátek</th><th>Režim</th><th>Stav</th><th>Změny</th><th></th></tr>
+    {% for item in runs %}{% set r = item.run %}{% set s = item.summary %}
+    <tr><td>{{ r.started_at|dt(cfg.timezone) }}</td><td>{{ r.mode }}</td><td>{{ run_pill(r.status) }}</td>
+      <td class="small">{% if s.get("create") is not none %}+{{ s.get("create", 0) }} nových · {{ s.get("update", 0) }} upraveno · {{ s.get("unchanged", 0) }} beze změny{% elif s.get("reason") %}{{ s.reason }}{% elif r.error %}{{ r.error }}{% endif %}</td>
+      <td><a href="/runs/{{ r.id }}">Detail</a></td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<div class="empty">Zatím neproběhla žádná synchronizace.</div>{% endif %}
+</div>
+
+{% endblock %}

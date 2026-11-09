@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Běh #{{ run.id }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Běh #{{ run.id }} {{ run_pill(run.status) }}</h1>
+  <p class="muted">{{ run.mode }} · {{ run.started_at|dt(tz, true) }}{% if run.finished_at %} → {{ run.finished_at|dt(tz, true) }}{% endif %}</p></div>
+  <a class="button secondary" href="/runs">← Historie</a></div>
+
+{% if run.mode == "dry-run" %}<div class="alert info">Dry-run: do Google kalendářů se nic nezapsalo ani nesmazalo.</div>{% endif %}
+{% if run.status == "drift_blocked" %}<div class="alert bad"><b>Zápis byl zablokován ochranou proti změně struktury XLSX</b> (jiný layout nebo výrazný pokles počtu zápisů). Nic se nemazalo. Zkontrolujte soubor a problémy níže.</div>{% endif %}
+{% if run.status == "deferred" %}<div class="alert warn">Zdroj se během běhu změnil ({{ summary.get("reason", "") }}) – další plánovaný běh to zopakuje.</div>{% endif %}
+{% if run.error %}<div class="alert bad">Chyba: {{ run.error }}</div>{% endif %}
+{% if summary.get("failed_technicians") %}<div class="alert bad">Selhali technici: {{ summary.failed_technicians|join(", ") }} (viz stránku Technici).</div>{% endif %}
+
+{% if summary.get("create") is not none %}
+<div class="grid">
+  <div class="card"><div class="stat-label">Nové události</div><div class="stat-value">{{ summary.get("create", 0) + summary.get("planned_create_without_calendar", 0) }}</div></div>
+  <div class="card"><div class="stat-label">Upravené</div><div class="stat-value">{{ summary.get("update", 0) }}</div></div>
+  <div class="card"><div class="stat-label">Beze změny</div><div class="stat-value">{{ summary.get("unchanged", 0) }}</div></div>
+  <div class="card"><div class="stat-label">Čeká na smazání</div><div class="stat-value">{{ summary.get("pending_stale", 0) }}</div></div>
+  <div class="card"><div class="stat-label">Cizí události (netknuté)</div><div class="stat-value">{{ summary.get("foreign_untouched", 0) }}</div></div>
+</div>
+{% if summary.get("awaiting_onboarding_samples") %}<div class="alert warn">Technici bez kalendáře ({{ summary.get("awaiting_onboarding", summary.get("skipped_unonboarded", "")) }}): {{ summary.awaiting_onboarding_samples|join(", ") }}</div>{% endif %}
+{% if summary.get("horizon") %}<p class="muted">Okno synchronizace: {{ summary.horizon["from"] }} – {{ summary.horizon.through }}</p>{% endif %}
+{% endif %}
+
+{% if summary.get("issue_count") %}
+<div class="card"><h2>Problémy při čtení XLSX ({{ summary.issue_count }})</h2>
+  <p>{% for code, n in summary.get("issue_counts", {}).items() %}<span class="pill warn">{{ code }}: {{ n }}</span> {% endfor %}</p>
+  <div class="table-wrap"><table><tr><th>Typ</th><th>List</th><th>Řádek</th><th>Detail</th></tr>
+  {% for i in summary.get("issue_samples", []) %}{% if i.get("code") != "layout" %}
+  <tr><td>{{ i.get("code") }}</td><td>{{ i.get("sheet", "") }}</td><td>{{ i.get("row", "") }}</td><td>{{ i.get("name", "") }} {{ i.get("reason", "") }}</td></tr>{% endif %}{% endfor %}
+  </table></div></div>
+{% endif %}
+
+<details class="card"><summary>Technické podrobnosti (JSON)</summary><pre>{{ summary|pretty_json }}</pre></details>
+{% endblock %}

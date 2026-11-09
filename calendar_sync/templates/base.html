@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}{{ title|default("Přehled") }}{% endblock %} · Calendar Sync</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+{% from "_macros.html" import csrf with context %}
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">C</span> Calendar Sync</a>
+    {% if authenticated %}
+    <nav class="nav" aria-label="Hlavní navigace">
+      {% for href, label in [("/", "Přehled"), ("/technicians", "Technici"), ("/runs", "Historie"), ("/stale", "Ke smazání"), ("/audit", "Audit"), ("/settings", "Nastavení"), ("/setup", "Průvodce"), ("/help", "Nápověda")] %}
+      <a href="{{ href }}"{% if path == href or (href != "/" and path.startswith(href + "/")) %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    <form method="post" action="/logout">{{ csrf() }}<button class="secondary small">Odhlásit</button></form>
+    {% endif %}
+  </div>
+</header>
+<main>
+  {% for kind, message in flashes %}<div class="alert {{ kind }}" role="status">{{ message }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+<footer>Calendar Sync {{ version }} · deterministická synchronizace XLSX → Google Kalendář</footer>
+</body>
+</html>

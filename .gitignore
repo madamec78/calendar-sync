@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+secrets/
+*.db
+*.sqlite*
+google-token.json
+.local/
+data/
+data-demo/
+*.egg-info/

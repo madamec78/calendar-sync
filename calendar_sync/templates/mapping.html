@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Diagnostika mapování{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Diagnostika mapování workbooku</h1>
+  <p class="muted">Stáhne zdrojový XLSX (pouze čtení) a ukáže, jak ho parser vidí.</p></div>
+  <a class="button secondary" href="/settings">← Nastavení</a></div>
+<div class="card">
+  {% if not oauth_ready %}<div class="alert bad">OAuth token chybí – soubor nelze načíst. Dokončete autorizaci.</div>{% endif %}
+  <p>Sheet pattern: <code>{{ cfg.sheet_pattern }}</code> · sloupec technika: <code>{{ cfg.technician_name_column }}</code> · header scan: {{ cfg.header_scan_rows }} ·
+    poslední test: {{ pill("good", "OK") if ok else pill("warn", "neověřeno") }}</p>
+  <form method="post" action="/setup/workbook-mapping/test" data-busy="Načítám…">{{ csrf() }}
+    <button {% if not oauth_ready %}disabled{% endif %}>Načíst snapshot a otestovat</button></form>
+</div>
+{% if preview %}
+<div class="card"><h2>Výsledek</h2>
+  <p>Událostí: <b>{{ preview.get("event_count", 0) }}</b> · problémů: <b>{{ preview.get("issue_count", 0) }}</b></p>
+  {% if preview.get("sample") %}<div class="table-wrap"><table><tr><th>Technik</th><th>Obsah</th><th>Začátek</th></tr>
+  {% for e in preview.sample %}<tr><td>{{ e.technician }}</td><td class="small">{{ e.summary }}</td><td class="small">{{ e.start.get("dateTime") or e.start.get("date") }}</td></tr>{% endfor %}
+  </table></div>{% endif %}
+  <details class="plain"><summary>Surový výstup</summary><pre>{{ preview|pretty_json }}</pre></details>
+</div>
+{% endif %}
+{% endblock %}

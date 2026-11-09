@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Onboarding dokončen{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Onboarding dokončen</h1>
+  <div class="alert ok"><b>{{ message }}</b></div>
+  <p>Nejde o pozvánku k události, ale ke sdílenému kalendáři. E-mail technika poskytuje pouze čtení kalendáře, nikdy přístup do administrace.</p>
+  <p>Kalendář: <b>{{ calendar }}</b></p>
+  <p class="row"><a class="button" href="{{ link }}" rel="noopener">Přihlásit kalendář</a> <a class="button secondary" href="/technicians">Zpět na techniky</a></p>
+  <p class="muted small">iPhone: kalendář může být nutné povolit na <a href="https://www.google.com/calendar/syncselect" rel="noopener">google.com/calendar/syncselect</a>, pak v iOS vypnout/zapnout synchronizaci kalendářů.</p>
+</div>
+{% endblock %}

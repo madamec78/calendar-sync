@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf, pill, run_pill with context %}
+{% block title %}Technici{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Technici</h1>
+    <p class="muted">E-mail technika slouží <b>pouze</b> k udělení čtení jeho Google kalendáře – nedává přístup do administrace.</p></div>
+  {% if awaiting %}
+  <form method="post" action="/technicians/onboard-all" data-busy="Pracuji…"
+        data-confirm="Vytvořit kalendáře a odeslat jednorázové pozvánky ke sdílenému kalendáři ({{ awaiting }} techniků)?">
+    {{ csrf() }}<button>Onboardovat všechny čekající ({{ awaiting }})</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if candidates %}
+<div class="card">
+  <h2>Nalezení v XLSX – čekají na e-mail</h2>
+  <p class="muted">Jména nalezená v plánovacím souboru. Doplňte e-mail a technika přidejte, nebo jméno ignorujte (poznámky, legenda…).</p>
+  <div class="table-wrap"><table>
+    <tr><th>Jméno</th><th>E-mail</th><th></th></tr>
+    {% for x in candidates %}
+    <tr><td><b>{{ x.display_name }}</b></td>
+      <td><form method="post" action="/discovered/{{ x.id }}/add" class="row">{{ csrf() }}
+        <input type="email" name="email" required placeholder="technik@example.cz"><button class="small">Přidat</button></form></td>
+      <td><form method="post" action="/discovered/{{ x.id }}/ignore">{{ csrf() }}<button class="secondary small">Ignorovat</button></form></td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Spravovaní technici ({{ technicians|length }})</h2>
+  {% if technicians %}
+  <div class="table-wrap"><table>
+    <tr><th>Jméno v XLSX</th><th>Kalendář</th><th>Nastavení</th><th>Akce</th></tr>
+    {% for t in technicians %}
+    <tr>
+      <td><b>{{ t.workbook_name }}</b><br><span class="muted small">{{ owned_counts.get(t.id, 0) }} událostí v péči</span></td>
+      <td>
+        {% if t.calendar_id %}{{ pill("good", "kalendář hotov") }}<br><span class="small">{{ calendar_names[t.id] }}</span>
+        {% if t.onboarding_link %}<br><a class="small" href="{{ t.onboarding_link }}" rel="noopener">Přihlásit kalendář</a>{% endif %}
+        {% elif not t.enabled %}{{ pill("", "neaktivní") }}
+        {% else %}{{ pill("warn", "čeká na onboarding") }}{% endif %}
+        {% if t.last_error %}<br>{{ pill("bad", t.last_error) }}{% endif %}
+      </td>
+      <td>
+        <form method="post" action="/technicians/{{ t.id }}/update">{{ csrf() }}
+          <label>E-mail<input type="email" name="email" value="{{ t.email }}" required></label>
+          <details class="plain"><summary class="small">Existující Calendar ID</summary>
+            <input name="calendar_id" value="{{ t.calendar_id or '' }}" placeholder="…@group.calendar.google.com"></details>
+          <label class="check"><input type="checkbox" name="enabled" {% if t.enabled %}checked{% endif %}> aktivní</label>
+          <button class="secondary small">Uložit</button>
+        </form>
+      </td>
+      <td>
+        <form method="post" action="/technicians/{{ t.id }}/onboard" data-busy="Pracuji…"
+              data-confirm="Při prvním sdílení Google odešle technikovi jednorázovou pozvánku ke sdílenému kalendáři. Pokračovat?">{{ csrf() }}
+          <button class="small" {% if not t.email %}disabled{% endif %}>{{ "Znovu ověřit sdílení" if t.calendar_id else "Onboard" }}</button></form>
+        <form method="post" action="/technicians/{{ t.id }}/remove" data-confirm="Odebrat technika z aplikace? Google kalendář ani události se nesmažou.">{{ csrf() }}
+          {% if t.calendar_id or owned_counts.get(t.id, 0) %}<label class="check small"><input type="checkbox" name="confirm" value="yes" required> Potvrzuji pouze odstranění lokálního mapování</label>{% endif %}
+          <button class="danger small">Odebrat</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<div class="empty">Zatím žádní technici. {% if not complete %}Spusťte v <a href="/setup">průvodci</a> načtení jmen z XLSX.{% endif %}</div>{% endif %}
+</div>
+
+<details class="card"><summary>Přidat technika ručně</summary>
+  <form method="post" action="/technicians" class="fields mt">{{ csrf() }}
+    <label>Jméno přesně jako v XLSX<input name="workbook_name" required></label>
+    <label>E-mail<input type="email" name="email" required></label>
+    <label class="check"><input type="checkbox" name="enabled" checked> aktivní</label>
+    <div><button>Přidat</button></div>
+  </form>
+</details>
+
+{% if ignored %}
+<details class="card"><summary>Ignorovaná jména ({{ ignored|length }})</summary>
+  <ul>{% for x in ignored %}<li>{{ x.display_name }}
+    <form method="post" action="/discovered/{{ x.id }}/restore" class="inline-form">{{ csrf() }}<button class="secondary small">Obnovit</button></form></li>{% endfor %}</ul>
+</details>
+{% endif %}
+{% endblock %}
