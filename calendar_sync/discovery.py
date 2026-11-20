@@ -40,3 +40,13 @@ def record_discovered(db, issues: list[dict]) -> None:
         else:
             db.add(DiscoveredTechnician(normalized_name=key, display_name=display, last_seen_at=now))
     db.commit()
+
+
+def hide_ignored(db, issues: list[dict]) -> list[dict]:
+    """Drop ``unmapped_technician`` reports for names the admin ignored (and for legend/header cells)."""
+    ignored = set(db.scalars(select(DiscoveredTechnician.normalized_name).where(DiscoveredTechnician.ignored.is_(True))))
+    def hidden(issue: dict) -> bool:
+        if issue.get("code") != "unmapped_technician":
+            return False
+        return not is_candidate(issue.get("name")) or normalized_name(issue.get("name")) in ignored
+    return [issue for issue in issues if not hidden(issue)]

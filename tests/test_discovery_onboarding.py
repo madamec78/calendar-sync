@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, select, text
 from test_web import login, token
 
-from calendar_sync.discovery import record_discovered
+from calendar_sync.discovery import hide_ignored, record_discovered
 from calendar_sync.google import GoogleClient
 from calendar_sync.models import DiscoveredTechnician, OwnedEvent, SyncRun, Technician, init_db
 from calendar_sync.setup import set_setting
@@ -34,6 +34,23 @@ def test_discovery_persists_deduplicates_filters_and_survives_session(settings):
         items = list(db.scalars(select(DiscoveredTechnician)))
         assert len(items) == 1
         assert items[0].display_name == "Žák Čeněk"
+
+
+def test_ignored_names_and_legend_are_hidden_from_issue_reports(settings):
+    app = create_app(settings, FakeGoogle())
+    issues = [
+        {"code": "unmapped_technician", "name": "Strych Ladislav", "sheet": "a"},
+        {"code": "unmapped_technician", "name": "Strych  Ladislav", "sheet": "b"},
+        {"code": "unmapped_technician", "name": "Brož Michael", "sheet": "a"},
+        {"code": "unmapped_technician", "name": "Legenda:", "sheet": "a"},
+        {"code": "pair", "sheet": "a", "reason": "A + B"},
+    ]
+    with app.state.sessions() as db:
+        record_discovered(db, issues)
+        db.scalar(select(DiscoveredTechnician).where(DiscoveredTechnician.display_name == "Strych Ladislav")).ignored = True
+        db.commit()
+        visible = hide_ignored(db, issues)
+    assert [i.get("name") or i["code"] for i in visible] == ["Brož Michael", "pair"]
 
 
 def test_init_db_adds_discovery_table_to_existing_database(tmp_path):

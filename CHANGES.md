@@ -51,3 +51,5 @@ Technici, jejichž jména stojí v plánovacím XLSX ve sloupci jmen **v řádc�
 v dalším týdnu se projeví sama. Záznam uvedený u obou se nezdvojuje. Nalezené dvojice jsou vidět ve výsledku
 synchronizace (hlášení `pair`). Nepřítomnost jednoho z dvojice se záměrně neřeší: druhý dál dostává společné záznamy.
 Implementace: `parser.detect_pairs`, `parser.share_events`; testy `tests/test_pairs.py`.
+
+Ignorovaná jména a buňky „Legenda:“ se už nehlásí jako `unmapped_technician` v detailu běhu (`discovery.hide_ignored`).

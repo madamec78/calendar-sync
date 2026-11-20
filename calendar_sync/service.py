@@ -16,7 +16,7 @@ from googleapiclient.errors import HttpError
 from sqlalchemy import select
 
 from .config import Settings
-from .discovery import record_discovered
+from .discovery import hide_ignored, record_discovered
 from .google import GoogleClient, OAuthReauthorizationRequired, OAuthTransientError
 from .models import AuditLog, OwnedEvent, Snapshot, SyncRun, Technician
 from .parser import ParserConfig, TechnicianIdentity, parse_workbook
@@ -108,6 +108,7 @@ class SyncService:
                 parsed, issues = parse_workbook(source, before.id, before.version, digest, identities, self.timezone, parser_config, date_from, date_through)
                 with self.sessions() as db:
                     record_discovered(db, issues)
+                    issues = hide_ignored(db, issues)
             layout = next((x for x in issues if x.get("code") == "layout"), {})
             fatal = [x for x in issues if x.get("severity") == "fatal"]
             assignment_count = int(layout.get("assignments", 0))
