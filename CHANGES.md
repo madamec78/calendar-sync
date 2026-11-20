@@ -42,3 +42,12 @@ nemění ani nemažou, mazání ve výchozím stavu vypnuto, first-run gate) jso
 - Aplikace sama žádné e-maily neodesílá; jedinou zprávou je jednorázová pozvánka ke sdílenému kalendáři, kterou při prvním sdílení rozešle Google. Nepoužívaný SMTP modul a další „mrtvá“ nastavení jsou odstraněny.
 - Cílem OAuth zůstává Desktop klient a jediný centrální účet; Workspace/„In production“ viz README.
 - Živé volání Google nebylo spuštěno ani testováno (chybí přístup); chování proti Google je ověřeno testy s atrapami Google (tests/fake_drive_calendar.py); následně běželo na testovacím serveru.
+
+## Dvojice techniků (sdílené zakázky)
+
+Technici, jejichž jména stojí v plánovacím XLSX ve sloupci jmen **v řádcích přímo pod sebou**, tvoří dvojici
+(např. Veselý Jiří a Pažičan Petr). Každý z nich má dál svůj kalendář, ale dostane do něj všechny záznamy obou
+(zakázky i poznámky typu „Nemoc“ nebo „volno“). Dvojice se zjišťují zvlášť pro každý list, takže změna dvojice
+v dalším týdnu se projeví sama. Záznam uvedený u obou se nezdvojuje. Nalezené dvojice jsou vidět ve výsledku
+synchronizace (hlášení `pair`). Nepřítomnost jednoho z dvojice se záměrně neřeší: druhý dál dostává společné záznamy.
+Implementace: `parser.detect_pairs`, `parser.share_events`; testy `tests/test_pairs.py`.

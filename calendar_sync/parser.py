@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import fnmatch
 import hashlib
@@ -188,10 +189,60 @@ def layout_fingerprint(sheets: list[dict]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def detect_pairs(name_rows: dict[int, TechnicianIdentity]) -> list[list[TechnicianIdentity]]:
+    """Technicians whose names stand in directly consecutive rows work together (a pair/crew)."""
+    groups: list[list[TechnicianIdentity]] = []
+    run: list[int] = []
+    for row in sorted(name_rows):
+        if run and row != run[-1] + 1:
+            groups.append(run); run = []
+        run.append(row)
+    if run: groups.append(run)
+    result = []
+    for rows in groups:
+        members = list({name_rows[r].canonical_id: name_rows[r] for r in rows}.values())
+        if len(members) >= 2: result.append(members)
+    return result
+
+
+def share_events(events: list[Event], groups: list[tuple[str, list[TechnicianIdentity]]]) -> list[Event]:
+    """Give every member of a pair the entries (jobs, notes such as illness or leave) of all members.
+
+    ``groups`` are (sheet name, members): pairs are detected per sheet, so a changed pair next week
+    never leaks into another sheet. An entry is identified by (date, job token, content hash). If
+    several members already carry it, it is not duplicated; if it occurs N times for some member,
+    every member gets it N times (largest count wins).
+    """
+    extra: list[Event] = []
+    for sheet, members in groups:
+        if len({m.canonical_id for m in members}) < 2:
+            continue
+        by_member: dict[str, list[Event]] = {}
+        for event in events:
+            if event.private.get("source_sheet") == sheet:
+                by_member.setdefault(event.private["canonical_technician_id"], []).append(event)
+        entries: dict[tuple, dict] = {}  # (day, token, hash) -> {"template": Event, "counts": {canonical_id: n}}
+        for member in members:
+            for event in by_member.get(member.canonical_id, []):
+                _prefix, _canon, day, token, content_hash, _occ = event.private["source_key"].rsplit("|", 5)
+                entry = entries.setdefault((day, token, content_hash), {"template": event, "counts": {}})
+                entry["counts"][member.canonical_id] = entry["counts"].get(member.canonical_id, 0) + 1
+        for (day, token, content_hash), entry in sorted(entries.items()):
+            wanted = max(entry["counts"].values())
+            template = entry["template"]
+            prefix = template.private["source_key"].rsplit("|", 5)[0]
+            for member in members:
+                for occurrence in range(entry["counts"].get(member.canonical_id, 0), wanted):
+                    key = f"{prefix}|{member.canonical_id}|{day}|{token}|{content_hash}|{occurrence}"
+                    private = {**template.private, "source_key": key, "canonical_technician_id": member.canonical_id, "technician_name": member.name}
+                    extra.append(dataclasses.replace(template, technician=member.name, source_key=key, private=private))
+    return sorted([*events, *extra], key=lambda x: x.source_key)
+
+
 def parse_workbook(path: Path, file_id: str, version: str, md5: str, technicians, timezone_name: str = "Europe/Prague", config: ParserConfig | None = None, date_from: dt.date | None = None, date_through: dt.date | None = None) -> tuple[list[Event], list[dict]]:
     report_layout = config is not None
     config = config or ParserConfig(); zone = ZoneInfo(timezone_name); identities = technician_index(technicians)
-    atoms: list[dict] = []; issues: list[dict] = []; layouts = []; matched_sheets = 0; assignment_cells = 0
+    atoms: list[dict] = []; issues: list[dict] = []; layouts = []; matched_sheets = 0; assignment_cells = 0; pair_groups: list[tuple[str, list[TechnicianIdentity]]] = []
     for sheet, cells in xlsx_cells(path):
         if not fnmatch.fnmatchcase(sheet, config.sheet_pattern): continue
         span = parse_sheet_name(sheet)
@@ -207,6 +258,10 @@ def parse_workbook(path: Path, file_id: str, version: str, md5: str, technicians
             issues.append({"severity": "fatal", "code": "missing_date_headers", "sheet": sheet, "reason": "date headers missing or do not match sheet name"}); continue
         current: TechnicianIdentity | None = None; current_label = ""; name_col = config.technician_name_column.upper()
         rows = sorted({int(m.group(2)) for ref in cells if (m := CELL_RE.match(ref)) and int(m.group(2)) > (header_row or 0)})
+        name_rows = {row: identities[label.casefold()] for row in rows if (label := norm(cells.get(f"{name_col}{row}", ""))) and label.casefold() in identities}
+        for members in detect_pairs(name_rows):
+            pair_groups.append((sheet, members))
+            issues.append({"severity": "info", "code": "pair", "sheet": sheet, "reason": " + ".join(m.name for m in members)})
         for row in rows:
             label = norm(cells.get(f"{name_col}{row}", ""))
             if label:
@@ -249,6 +304,7 @@ def parse_workbook(path: Path, file_id: str, version: str, md5: str, technicians
         else: start = {"date": atom["date"].isoformat()}; end = {"date": (atom["date"] + dt.timedelta(days=1)).isoformat()}
         category = CATEGORY_RE.search(atom["text"]); private = {"sync_mark": "calendar_planning_v2", "source_file_id": file_id, "workbook_profile": config.workbook_profile, "source_key": atom["source_key"], "canonical_technician_id": atom["canonical_id"], "technician_name": atom["technician"], "source_sheet": atom["sheet"], "source_version": version, "source_hash": md5}
         events.append(Event(atom["technician"], atom["source_key"], atom["text"], "Kontakt: " + ", ".join(found_phones) if found_phones else "", location(atom["text"]) if config.parse_addresses else None, config.color_map.get(category.group(1).upper()) if category else None, start, end, private))
+    if pair_groups: events = share_events(events, pair_groups)
     if report_layout:
         issues.append({"severity": "info", "code": "layout", "layout_fingerprint": layout_fingerprint(layouts), "assignments": assignment_cells, "matched_sheets": matched_sheets})
     return events, issues
